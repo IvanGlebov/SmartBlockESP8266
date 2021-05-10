@@ -81,15 +81,6 @@ packetData collectData();
 void setup() {
   // Serial bus initialization
   Serial.begin(115200);
-  // pinMode(masterBus, OUTPUT);
-  // pinMode(sensorBus, OUTPUT);
-
-  // switchBus(sensors);
-  // digitalWrite(masterBus, LOW);
-  // digitalWrite(sensorBus, HIGH);
-  // digitalWrite(masterBus, LOW);
-  // digitalWrite(sensorBus, HIGH);
-  // I2C bus initialization
   Wire.begin(9); 
 
   // BH1750 initialization
@@ -123,12 +114,8 @@ void setup() {
 }
 
 void loop() {
-  // digitalWrite(masterBus, HIGH);
-  // digitalWrite(sensorBus, HIGH);
-  if (collectFlag == true){
-    collectFlag = false;
-    sensorsData = collectData();
-  }
+
+
   debugLoop(1000);
 
 }
