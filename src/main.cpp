@@ -1,4 +1,17 @@
 #include <Arduino.h> // Main library
+
+#define BLYNK_PRINT Serial
+
+#define USE_SHT false
+#define USE_BME true
+#define SENSOR_NUMBER 1
+
+#define USE_LOCAL_SERVER true
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+
 #include <Wire.h> // For all I2C sensors and I2C bus to master
 #include <BH1750.h> // For BH1750 digital light sensor
 #include <SPI.h> //
@@ -9,8 +22,31 @@
 #include <math.h> // For using atof()
 // #include <SimpleTimer.h> // For timed data collection
 
+
+char auth[] = "sBCfNk-E3r-LPhH6Ry4nQxU_aBg1rwSR"; // Home sensor 1
+// char auth[] = "6MMzG4BhYC5imFx72PvISj8aNABqBTQc"; // Home sensor 2
+// char auth[] = ""; // Remote sensor 1
+// char auth[] = ""; // Remote sensor 2
+
+
+char ssid_prod[] = "Farm_router";    // prod
+char ssid_local[] = "Keenetic-4926"; // home
+
+char pass_prod[] = "zqecxwrv123"; // prod
+char pass_local[] = "Q4WmFQTa";   // home
+
 // BOARD ADDRESS IS SET TO 1 //
-enum modes{master=1, sensors=2};
+
+WidgetBridge bridge1(V1);
+
+BlynkTimer sendData;
+
+BLYNK_CONNECTED() {
+  // Token of master board
+  bridge1.setAuthToken("Rz8hI-YjZVfUY7qQb8hJGBFh48SuUn84");
+}
+
+// enum modes{master=1, sensors=2};
 
 #define masterBus 4
 #define sensorBus 3
@@ -50,8 +86,8 @@ float mapFloat(float x, float in_min, float in_max, float out_min, float out_max
 
 
 // SHT30 shield 
-// SHT3X sht30(0x44);
-// void getSHT(float *); // Recieve array of 2 elements as input value and write values to these array
+SHT3X sht30(0x44);
+void getSHT(float *); // Recieve array of 2 elements as input value and write values to these array
 
 
 // BME280 instead of SHT30
@@ -64,24 +100,12 @@ void getBME(float *data);
 // Function in loop cycle called only if "debug" is true
 void debugLoop(int);
 
-
-void requestEvent();
-// New format - sending data to function in the structure
-String structFormPacket(packetData d1);
-// Old version with sending data right to function, not in the structure format
-// String formPacket(int id, float tempAir, float humAir, float tempGround, float humGround, float lightLevel);
-
-// Function to switch between master and sensors I2C buses
-void switchBus(int mode);
-
-packetData sensorsData;
-
-packetData collectData();
+void collectData();
 
 void setup() {
   // Serial bus initialization
   Serial.begin(115200);
-  Wire.begin(9); 
+  Wire.begin(); 
 
   // BH1750 initialization
   lightSensor.begin(BH1750::ONE_TIME_HIGH_RES_MODE);
@@ -97,57 +121,67 @@ void setup() {
   ina219_t.setCalibration_16V_400mA();
   ina219_h.setCalibration_16V_400mA();
 
-  // BME280 SENSOR BLOCK
-  if (!bme.begin(0x76, &Wire))
-    Serial.println("BME280 finfing error");
   
+  // BME280 SENSOR BLOCK
+  if (USE_BME){
+    if (!bme.begin(0x76, &Wire))
+      Serial.println("BME280 not found");
+  }
+  if (USE_LOCAL_SERVER){
+    Blynk.begin(auth, ssid_local, pass_local, IPAddress(192, 168, 1, 106), 8080);
+  } else {
+    Blynk.begin(auth, ssid_prod, pass_prod, IPAddress(10, 1, 92, 35), 8080);
+  }
+  // Blynk.begin(auth, ssid, pass, "iotablynk.iota02.keenetic.link");
 
-  // Set up timer for data collecting
-  // dataCollect.setInterval(collectInterval);
-
-  // digitalWrite(masterBus, HIGH);
-  // digitalWrite(sensorBus, LOW);
-  // Board will wait for master call, collect data and send it to master
-  Wire.onRequest(requestEvent); 
-  Serial.println("Setup finished");
-  collectData();
+  sendData.setInterval(1000L, collectData);
 }
 
 void loop() {
 
-
-  debugLoop(1000);
+  Blynk.run();
+  sendData.run();
+  // debugLoop(1000);
 
 }
 
-packetData collectData(){
+void collectData(){
   packetData temp;
   Serial.println("Collecting data");
-  // Open sensors bus for collecting data
-  // and close master bus
-  digitalWrite(masterBus, LOW);
-  digitalWrite(sensorBus, HIGH);
-  // Collect data
-  // float shtBuff[2];
-  // getSHT(shtBuff);
+  if (USE_SHT){
+    float shtBuff[2];
+    getSHT(shtBuff);
+    temp.airTemp = shtBuff[0];
+    temp.airHum = shtBuff[1];
+  }
+  if (USE_BME){
+    float bmeBuff[2];
+    getBME(bmeBuff);
+    temp.airTemp = bmeBuff[0];
+    temp.airHum = bmeBuff[1];
+  }
 
-  float bmeBuff[2];
-  getBME(bmeBuff);
-  temp.airHum = bmeBuff[0];
-  temp.airTemp = bmeBuff[1];
   temp.groundHum = getGroundHum();
   temp.groundTemp = getGroundTemp();
-  temp.id = 2;
   temp.lightLevel = getLight();
-  // Close sensors bus and open master bus again
-  digitalWrite(sensorBus, LOW);
-  digitalWrite(masterBus, HIGH);
-  // return data
-  return temp;
+  if (SENSOR_NUMBER == 1){
+    bridge1.virtualWrite(V70, temp.airTemp);
+    bridge1.virtualWrite(V71, temp.airHum);
+    bridge1.virtualWrite(V72, temp.groundTemp);
+    bridge1.virtualWrite(V73, temp.groundHum);
+    bridge1.virtualWrite(V74, temp.lightLevel);
+  }
+  if (SENSOR_NUMBER == 2){
+    bridge1.virtualWrite(V75, temp.airTemp);
+    bridge1.virtualWrite(V76, temp.airHum);
+    bridge1.virtualWrite(V77, temp.groundTemp);
+    bridge1.virtualWrite(V78, temp.groundHum);
+    bridge1.virtualWrite(V79, temp.lightLevel);
+  }
 }
 
 float getLight(){
-  float lux = lightSensor.readLightLevel(true);
+  float lux = lightSensor.readLightLevel();
   // AutoLight measurement time adjustment for different lihgt enviroment
   if(lux < 0) Serial.println("Error reading ligt level");
   else {
@@ -219,11 +253,10 @@ float getGroundHum(){
 }
 
 void getSHT(float *data){
-  // float *pointer = data;
-  // if(sht30.get() == 0){
-    // *(data) = sht30.cTemp;
-    // *(data+1) = sht30.humidity;
-  // }
+  if(sht30.get() == 0){
+    *(data) = sht30.cTemp;
+    *(data+1) = sht30.humidity;
+  }
 }
 
 void getBME(float *data){
@@ -232,18 +265,15 @@ void getBME(float *data){
 }
 
 void debugLoop(int delayTime){
-  // digitalWrite(masterBus, HIGH);
-  // digitalWrite(sensorBus, HIGH);
-  // switchBus(sensors);
   Serial.println("--------------------------------------------");
   Serial.println("Light level : " + String(getLight()) + " lux");
-
-
-  // Serial.println("SHT30 data reading");
-  // getSHT(sht);
-  // Serial.println("SHT30 temperature : " + String(sht[0]) + " C");
-  // Serial.println("STH30 humidity : " + String(sht[1]) + " %");
-
+  if (USE_SHT){
+    float sht[2];
+    Serial.println("SHT30 data reading");
+    getSHT(sht);
+    Serial.println("SHT30 temperature : " + String(sht[0]) + " C");
+    Serial.println("STH30 humidity : " + String(sht[1]) + " %");
+  }
   float bme_buff[2];
   getBME(bme_buff);
   Serial.println("BME 280 sensor");
@@ -254,109 +284,6 @@ void debugLoop(int delayTime){
   Serial.println("Ground temperature : " + String(getGroundTemp()) + " C");
   
   Serial.println("--------------------------------------------");
-  // Serial.println("swithc")
   delay(delayTime);
   
-}
-
-String structFormPacket(packetData d1){
-  String temp = "";
-  double l, r;
-
-  // ID adding to string
-  if(d1.id < 10) temp += "0" + String(d1.id);
-  else temp += String(d1.id);
-
-  // Air temperature adding to string
-  if(d1.airTemp >= 0) temp += "+";
-  else temp += "-";
-  //  abs(x) ((x)>0?(x):-(x))
-  float airTemp = abs(d1.airTemp);
-  l = int(airTemp); // Left part of the number
-  r = airTemp - l; // right part of the nember
-  r *= 100; // Convert r value to full integer
-  r = int(r);
-  if(l < 10) temp += "0" + String(static_cast<int>(l));
-  else if (l < 100) temp += String(static_cast<int>(l));
-  if(r < 10) temp += "0" + String(static_cast<int>(r));
-  else if (r < 100)  temp += String(static_cast<int>(r));
-
-  // Air humidity adding to string
-  l = int(d1.airHum);
-  r = int((d1.airHum-l)*100);
-  if(l < 10) temp += "00" + String(static_cast<int>(l));
-  else if (l < 100) temp += "0" + String(static_cast<int>(l));
-  else if (l == 100) temp += "100/";
-  if(r < 10) temp += "0" + String(static_cast<int>(r));
-  else if (r < 100)  temp += String(static_cast<int>(r));
-
-  //tempGround
-  if(d1.groundTemp >= 0) temp += "+";
-  else temp += "-";
-  //  abs(x) ((x)>0?(x):-(x))
-  float groundTemp = abs(d1.groundTemp);
-  l = int(groundTemp); // Left part of the number
-  r = groundTemp - l; // right part of the nember
-  r *= 100; // Convert r value to full integer
-  r = int(r);
-  // temp += "T";
-  if(l < 10) temp += "0" + String(static_cast<int>(l));
-  else if (l < 100) temp += String(static_cast<int>(l));
-  if(r < 10) temp += "0" + String(static_cast<int>(r));
-  else if (r < 100)  temp += String(static_cast<int>(r));
-
-  // Ground humidity adding to string
-  l = int(d1.groundHum);
-  r = int((d1.groundHum-l)*100);
-  if(l < 10) temp += "00" + String(static_cast<int>(l));
-  else if (l < 100) temp += "0" + String(static_cast<int>(l));
-  else if (l == 100) temp += "100";
-  if(r < 10) temp += "0" + String(static_cast<int>(r));
-  else if (r < 100)  temp += String(static_cast<int>(r));
-
-  // Light level adding to string
-  l = int(d1.lightLevel);
-  r = int((d1.lightLevel-l)*100);
-  if(l < 10) temp += "000" + String(static_cast<int>(l));
-  else if (l < 100) temp += "00" + String(static_cast<int>(l));
-  else if (l < 1000) temp += "0" + String(static_cast<int>(l));
-  else if (l < 10000) temp += String(static_cast<int>(l));
-  else temp += "9999/";
-  if(r < 10) temp += "0" + String(static_cast<int>(r));
-  else if (r < 100)  temp += String(static_cast<int>(r));
-
-  return temp;
-}
-
-// function that executes whenever data is requested by master
-// this function is registered as an event, see setup()
-void requestEvent() {
-  Serial.println("Request from Master to send data");
-
-  String packet1 = structFormPacket(sensorsData);
-
-  int len = 28;
-  for(int i=0; i < len; i++){
-    Wire.write(packet1[i]);
-    if (debug) Serial.print(packet1[i]);
-  }
-  if (debug) Serial.println();
-
-  collectFlag = true;
-}
-
-// Function to switch between master and sensors I2C buses
-void switchBus(int mode){
-  switch(mode){
-    case master:
-      digitalWrite(masterBus, HIGH);
-      digitalWrite(sensorBus, LOW);
-      if (debug) Serial.println("Switching to master bus");
-      break;
-    case sensors:
-      digitalWrite(masterBus, LOW);
-      digitalWrite(sensorBus, HIGH);
-      if (debug) Serial.println("Switching to sensors bus");
-      break;
-  }
 }
