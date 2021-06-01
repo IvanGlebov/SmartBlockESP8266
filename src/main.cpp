@@ -25,15 +25,18 @@
 
 char auth[] = "sBCfNk-E3r-LPhH6Ry4nQxU_aBg1rwSR"; // Home sensor 1
 // char auth[] = "6MMzG4BhYC5imFx72PvISj8aNABqBTQc"; // Home sensor 2
-// char auth[] = ""; // Remote sensor 1
-// char auth[] = ""; // Remote sensor 2
+// char auth[] = "FbS_SjsZ-FSD49xWy0OWnQkSnimge3VF"; // Remote sensor 1
+// char auth[] = "oEXGpkzmIHH6m3__7QBR7b_MNQflpfN3"; // Remote sensor 2
 
 
 char ssid_prod[] = "Farm_router";    // prod
-char ssid_local[] = "Keenetic-4926"; // home
+
+// char ssid_local[] = "Keenetic-4926"; // home
+char ssid_local[] = "ZeroTwo1"; // home
 
 char pass_prod[] = "zqecxwrv123"; // prod
-char pass_local[] = "Q4WmFQTa";   // home
+// char pass_local[] = "Q4WmFQTa";   // home
+char pass_local[] = "zqecxwrv123";   // home
 
 // BOARD ADDRESS IS SET TO 1 //
 
@@ -128,6 +131,8 @@ void setup() {
       Serial.println("BME280 not found");
   }
   if (USE_LOCAL_SERVER){
+    // String wifi = WiFi.softAPIP();
+    // Blynk.begin(auth, ssid_local, pass_local, "iota02.keenetic.link", 778);
     Blynk.begin(auth, ssid_local, pass_local, IPAddress(192, 168, 1, 106), 8080);
   } else {
     Blynk.begin(auth, ssid_prod, pass_prod, IPAddress(10, 1, 92, 35), 8080);
